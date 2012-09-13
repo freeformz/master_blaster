@@ -16,6 +16,8 @@ to get a simple admin repl: `DATABASE_URL=postgres://user:pwd@localhost/dbname b
 
 # Asumptions
 
+Although it's disabled atm, it assumes any security is provided by postgres' auth + SSL.
+
 it's meant to feed data to workers. It's up to the workers to verify that it can / should do the work and ensure locking.
 
 it's not durable. It's assumed that the class that appends jobs to the queue either handles that or it's not necessary.
