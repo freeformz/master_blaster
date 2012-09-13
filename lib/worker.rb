@@ -6,7 +6,6 @@ require 'forwardable'
 require 'thread'
 
 require 'scrolls'
-require 'pp'
 
 class Worker
   extend Forwardable
@@ -30,7 +29,7 @@ class Worker
 
   def work(job)
     log(class: self.class, fn: :work) do
-      sleep 2
+      log(class: self.class, fn: :work, doing: :work)
     end
   end
 

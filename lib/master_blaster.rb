@@ -6,61 +6,6 @@ require 'forwardable'
 require 'uri'
 require 'scrolls'
 
-require 'pp'
-
-class AtomicHash
-
-  extend Forwardable
-
-  attr_accessor :logger
-
-  def_delegators :logger, :log
-
-  def initialize
-    @logger = Scrolls
-    @mutex = Mutex.new
-    @hsh = {}
-  end
-
-  def update(uuid, attrs)
-    log(class: self.class, fn: :update, uuid: uuid, attrs: attrs) do
-      @mutex.synchronize do
-        @hsh[uuid] = attrs
-      end
-    end
-  end
-
-  def snapshot
-    log(class: self.class, fn: :snapshot) do
-      @mutex.synchronize do
-        @hsh.clone
-      end
-    end
-  end
-
-  def delete(uuid)
-    log(class: self.class, fn: :delete, uuid: uuid) do
-      @mutex.synchronize do
-        @hsh.delete(uuid)
-      end
-    end
-  end
-
-  def first_with(key, value)
-    log(class: self.class, fn: :first_with, key: key, value: value) do
-      @mutex.synchronize do
-        @hsh.select { |id, attrs| attrs[key] == value }.first
-      end
-    end
-  end
-
-  def include?(id)
-    @mutex.synchronize do
-      @hsh.include?(id)
-    end
-  end
-end
-
 class JobFeeder
   def initialize(queue)
     @queue = queue
