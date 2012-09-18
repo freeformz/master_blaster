@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 
+require_relative '../lib/postgres_connection'
 require_relative '../lib/worker'
 
-worker = Worker.new(ENV['DATABASE_URL'])
+pgconn = PostgresConnectionByURL.new(ENV['DATABASE_URL'])
+worker = Worker.new(pgconn)
 worker.run

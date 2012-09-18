@@ -1,34 +1,19 @@
 require 'pg'
+require 'scrolls'
+require 'forwardable'
 
-module PostgresConnection
+class PostgresConnectionByURL
+  extend Forwardable
 
-  def setup_pg_connection(url, app_name)
+  attr_accessor :logger
+
+  def_delegators :logger, :log
+
+  def_delegators :conn, :exec, :wait_for_notify, :finish
+
+  def initialize(url)
+    @logger = Scrolls
     @uri = URI.parse(url)
-    set_connection_app_name(app_name)
-  end
-
-  def set_connection_app_name(app_name)
-    log(class: self.class, fn: :set_connection_app_name, to: app_name) do
-      conn.exec("set application_name = #{app_name}")
-    end
-  end
-
-  private
-
-  def conn
-    @conn ||= begin
-                log(class: self.class, fn: :conn, new: true) do
-                  ::PGconn.new(
-                    host:     @uri.host,
-                    user:     @uri.user,
-                    dbname:   @uri.path[1..-1],
-                    password: @uri.password,
-                    port:     @uri.port,
-                    #sslmode:  'require',
-                    connect_timeout: 20
-                  )
-                end
-              end
   end
 
   def unlisten(event)
@@ -50,4 +35,26 @@ module PostgresConnection
       conn.exec(msg)
     end
   end
+
+  def set_application_name(app_name)
+    log(class: self.class, fn: :set_connection_app_name, to: app_name) do
+      conn.exec("set application_name = #{app_name}")
+    end
+  end
+
+  private
+
+  def conn
+    @conn ||= log(class: self.class, fn: :conn, new: true) do
+                ::PGconn.new(
+                  host:     @uri.host,
+                  user:     @uri.user,
+                  dbname:   @uri.path[1..-1],
+                  password: @uri.password,
+                  port:     @uri.port,
+                  #sslmode:  'require',
+                  connect_timeout: 20)
+              end
+  end
+
 end

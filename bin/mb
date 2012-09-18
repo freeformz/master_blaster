@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require_relative '../lib/postgres_connection'
 require_relative '../lib/master_blaster'
 require 'thread'
 
@@ -7,5 +8,6 @@ queue = Queue.new
 
 feeder = Thread.new { JobFeeder.new(queue).run }
 
-mb = MasterBlaster.new(ENV['DATABASE_URL'], queue)
+pgconn = PostgresConnectionByURL.new(ENV['DATABASE_URL'])
+mb = MasterBlaster.new(pgconn, queue)
 mb.run

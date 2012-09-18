@@ -1,5 +1,3 @@
-require_relative 'postgres_connection'
-
 require 'thread'
 require 'forwardable'
 
@@ -15,34 +13,31 @@ class JobFeeder
   def run
     loop do
       @queue << (@start += 1)
-      sleep 0.01
+      sleep 1
     end
   end
 end
 
 class MasterBlaster
   extend Forwardable
-  include PostgresConnection
 
-  attr_accessor :logger
+  def_delegators :@logger, :log
 
-  def_delegators :logger, :log
-
-  def initialize(url, queue)
+  def initialize(conn, queue)
     @logger = Scrolls
+    @conn = conn
+    @conn.set_application_name('master_blaster')
     @queue = queue
-    setup_pg_connection(url, 'master_blaster')
     terminate_workers
     @workers = {}
-    @outstanding_jobs = {}
   end
 
   def run
-    listen_for :worker_starting
-    listen_for :worker_waiting_for_job
-    listen_for :worker_shutting_down
-    listen_for :worker_running_job
-    listen_for :mb_admin
+    @conn.listen_for :worker_starting
+    @conn.listen_for :worker_waiting_for_job
+    @conn.listen_for :worker_shutting_down
+    @conn.listen_for :worker_running_job
+    @conn.listen_for :mb_admin
     run_workers
     work
   end
@@ -52,7 +47,7 @@ class MasterBlaster
   def work
     log(class: self.class, fn: :work) do
       loop do
-        conn.wait_for_notify(0.1) do |event, pid, payload|
+        @conn.wait_for_notify(0.1) do |event, pid, payload|
           log(class: self.class, fn: :work, recieved_event: event, from: pid, payload: payload)
           case event
           when 'worker_starting', 'worker_waiting_for_job', 'worker_running_job'
@@ -61,7 +56,7 @@ class MasterBlaster
             ack(payload, event)
           when 'worker_shutting_down'
             @workers.delete(payload)
-            unlisten payload
+            @conn.unlisten payload
           when 'mb_admin'
             next if payload.nil?
             input = payload.split(':')
@@ -82,7 +77,7 @@ class MasterBlaster
           if worker_id = get_a_worker_id_in_state("worker_waiting_for_job")
             log(class: self.class, fn: :work, worker_acquired: worker_id, job: job)
             update_worker_state(worker_id, 'worker_sent_job')
-            notify worker_id, "JOB:#{job}"
+            @conn.notify worker_id, "JOB:#{job}"
           else
             log(class: self.class, fn: :work, re_enqueue: true, job: job)
             @queue << job
@@ -93,7 +88,7 @@ class MasterBlaster
   end
 
   def send_admin_response(msg)
-    notify "mb_admin_response", msg
+    @conn.notify "mb_admin_response", msg
   end
 
   def admin_help
@@ -144,7 +139,7 @@ class MasterBlaster
   end
 
   def ack(uuid, event)
-    notify uuid, "ACK:#{event}"
+    @conn.notify uuid, "ACK:#{event}"
   end
 
   def run_workers
@@ -152,6 +147,6 @@ class MasterBlaster
   end
 
   def terminate_workers
-    notify 'worker_terminate'
+    @conn.notify 'worker_terminate'
   end
 end
