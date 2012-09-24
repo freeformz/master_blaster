@@ -54,9 +54,7 @@ class Worker
   private
 
   def handle_other_event(event, pid, payload)
-    unless event == 'worker_terminate'
-      log(class: self.class, fn: :handle_other_event, unknown_event: event, pid: pid, payload: payload)
-    end
+    log(class: self.class, fn: :handle_other_event, unknown_event: event, pid: pid, payload: payload)
     terminate
   end
 
