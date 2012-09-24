@@ -1,38 +1,22 @@
-require 'thread'
 require 'forwardable'
-
-require 'uri'
 require 'scrolls'
-
-class JobFeeder
-  def initialize(queue)
-    @queue = queue
-    @start = 1
-  end
-
-  def run
-    loop do
-      @queue << (@start += 1)
-      sleep 1
-    end
-  end
-end
 
 class MasterBlaster
   extend Forwardable
 
   def_delegators :@logger, :log
 
-  def initialize(conn, queue)
+  def initialize(conn)
     @logger = Scrolls
     @conn = conn
     @conn.set_application_name('master_blaster')
-    @queue = queue
     terminate_workers
     @workers = {}
   end
 
   def run
+    @conn.listen_for :feed_job
+    @conn.listen_for :feeder_shutting_down
     @conn.listen_for :worker_starting
     @conn.listen_for :worker_waiting_for_job
     @conn.listen_for :worker_shutting_down
@@ -47,7 +31,7 @@ class MasterBlaster
   def work
     log(class: self.class, fn: :work) do
       loop do
-        @conn.wait_for_notify(0.1) do |event, pid, payload|
+        @conn.wait_for_notify do |event, pid, payload|
           log(class: self.class, fn: :work, recieved_event: event, from: pid, payload: payload)
           case event
           when 'worker_starting', 'worker_waiting_for_job', 'worker_running_job'
@@ -57,6 +41,17 @@ class MasterBlaster
           when 'worker_shutting_down'
             @workers.delete(payload)
             @conn.unlisten payload
+          when 'feed_job'
+            job = job_from_payload(payload)
+            if worker_id = get_a_worker_id_in_state("worker_waiting_for_job")
+              log(class: self.class, fn: :work, worker_acquired: worker_id, job: job)
+              update_worker_state(worker_id, 'worker_sent_job')
+              @conn.notify worker_id, "JOB:#{job}"
+            else
+              log(class: self.class, fn: :work, worker_available: false, job: job)
+            end
+          when 'feeder_shutting_down'
+            log(class: self.class, fn: :work, feeder_shuttind_down: true)
           when 'mb_admin'
             next if payload.nil?
             input = payload.split(':')
@@ -72,17 +67,6 @@ class MasterBlaster
             exit
           end
         end
-        if job = get_job
-          log(class: self.class, fn: :work, job_acquired: job)
-          if worker_id = get_a_worker_id_in_state("worker_waiting_for_job")
-            log(class: self.class, fn: :work, worker_acquired: worker_id, job: job)
-            update_worker_state(worker_id, 'worker_sent_job')
-            @conn.notify worker_id, "JOB:#{job}"
-          else
-            log(class: self.class, fn: :work, re_enqueue: true, job: job)
-            @queue << job
-          end
-        end
       end
     end
   end
@@ -94,16 +78,11 @@ class MasterBlaster
   def admin_help
     send_admin_response "help: help text"
     send_admin_response "ping: responds with pong"
-    send_admin_response "queue_length: reports the current queue length"
     send_admin_response "workers: reports the current worker info"
   end
 
   def admin_ping
     send_admin_response "pong"
-  end
-
-  def admin_queue_length
-    send_admin_response @queue.length
   end
 
   def admin_workers
@@ -128,14 +107,8 @@ class MasterBlaster
     payload.split(':').first
   end
 
-  def get_job
-    log(class: self.class, fn: :get_job) do
-      begin
-        @queue.pop(true)
-      rescue ThreadError => e
-        return nil if e.message == 'queue_empty'
-      end
-    end
+  def job_from_payload(payload)
+    payload
   end
 
   def ack(uuid, event)

@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
 require_relative '../lib/postgres_connection'
-require_relative '../lib/master_blaster'
+require_relative '../lib/feeder'
 
 pgconn = PostgresConnectionByURL.new(ENV['DATABASE_URL'])
-mb = MasterBlaster.new(pgconn)
-mb.run
+feeder = JobFeeder.new(pgconn)
+feeder.run

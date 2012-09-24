@@ -1,8 +1,4 @@
-require 'uri'
 require 'securerandom'
-require 'forwardable'
-require 'thread'
-
 require 'scrolls'
 
 class Worker
@@ -31,7 +27,7 @@ class Worker
   def run
     loop do
       job = get_job
-      log(class: Worker, fn: :run, job_received: job)
+      log(class: self.class, fn: :run, job_received: job)
       set_state :worker_running_job
       work(job)
     end
