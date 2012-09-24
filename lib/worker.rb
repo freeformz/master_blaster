@@ -36,11 +36,18 @@ class Worker
   def get_job
     set_state :worker_waiting_for_job
     @conn.wait_for_notify do |event, pid, payload|
-      if event == @uuid && payload =~ /^JOB/
-        log(job: true, event: event, pid: pid, payload: payload)
-        payload.gsub(/^JOB:/,'')
+      case event
+      when @uuid
+        if payload =~ /^JOB/
+          log(job: true, event: event, pid: pid, payload: payload)
+          payload.gsub(/^JOB:/,'')
+        else
+          handle_unknown(event, pid, payload)
+        end
+      when 'worker_terminate'
+        terminate
       else
-        handle_other_event(event, pid, payload)
+        handle_unknown(event, pid, payload)
       end
     end
   end
@@ -53,8 +60,8 @@ class Worker
 
   private
 
-  def handle_other_event(event, pid, payload)
-    log(class: self.class, fn: :handle_other_event, unknown_event: event, pid: pid, payload: payload)
+  def handle_unknown(event, pid, payload)
+    log(class: self.class, fn: :handle_unknown, event: event, pid: pid, payload: payload)
     terminate
   end
 
